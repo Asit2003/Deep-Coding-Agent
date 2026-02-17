@@ -1,0 +1,36 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "deep"
+version = "0.1.0"
+description = "Coding agent workspace"
+readme = "Readme.md"
+requires-python = ">=3.9"
+
+[dependency-groups]
+prod = [
+    "langchain-core>=0.3.0",
+    "langgraph>=0.2.0",
+    "openai>=1.0.0"
+]
+dev = [
+    "pytest>=8.0.0",
+    "ruff>=0.6.0"
+]
+
+[tool.setuptools]
+packages = ["agent"]
+
+[tool.ruff]
+line-length = 88
+target-version = "py39"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "auto"
