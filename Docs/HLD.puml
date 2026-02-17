@@ -1,0 +1,40 @@
+@startuml
+title coding agent HLD
+
+participant User
+participant UI
+participant Orchestrator
+
+participant Planner
+participant "Coding Agent" as Agent
+participant tools
+participant verifier
+participant "test run"
+
+User-> UI: problem statement
+UI -> Orchestrator: understand and prepare\na plan to execute
+
+Orchestrator->Planner:prepare plan
+Planner->Planner: think, retrive the \nexisting data from cwd
+
+Planner -> tools:store the plan in file system(eg. todo.md)
+Orchestrator<-tools:Fetch the todo.md
+Orchestrator->Orchestrator:divide into 2 parts:\nindependent and dependent tasks
+Orchestrator->Agent:Call coding agents for\nIndependent tasks\n(Run tasks concurrently)
+Agent->tools:use tools for different tasks\nlike: file read, write, update, etc
+Orchestrator<-Agent:return the status and store the state
+Orchestrator->Orchestrator:Update the todo, and update if required\nand fetch the tasks to do next
+Orchestrator->Agent:Call coding agents for dependent\nand other remaining tasks
+Agent->tools:use tools for different tasks\nlike: file read, write, update, etc
+Orchestrator<-Agent:return the status and store the state
+Orchestrator->verifier:call verifier agent to check the final generated files/codes
+verifier->verifier:fetch all the generated codes and \nhighlight the issues between the files if any
+verifier -> Orchestrator: return the result
+Orchestrator->Orchestrator:do the reasoning about the next step,\nif required repeat the above tasks
+Orchestrator->"test run":call to run test cases
+"test run"->"test run":based on user requirement design\nand run the test cases
+Orchestrator<-"test run": return test info
+Orchestrator->Orchestrator:do the reasoning about the next step,\nif required repeat the above tasks, else end
+UI<-Orchestrator:return the final summary
+
+@enduml
