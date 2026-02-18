@@ -24,7 +24,7 @@ dev = [
 packages = ["agent"]
 
 [tool.ruff]
-line-length = 88
+line-length = 60
 target-version = "py39"
 
 [tool.ruff.lint]

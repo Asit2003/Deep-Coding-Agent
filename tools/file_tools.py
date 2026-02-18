@@ -5,7 +5,6 @@ those functions as `@tool` instances with detailed descriptions.
 """
 
 from langchain_core.tools import tool
-
 from utils import files as file_ops
 from utils.file_descriptions import (
     APPEND_FILE_DESCRIPTION,
@@ -43,7 +42,10 @@ from utils.file_descriptions import (
 )
 
 _TOOL_SPECS = [
-    ("get_current_directory", GET_CURRENT_DIRECTORY_DESCRIPTION),
+    (
+        "get_current_directory",
+        GET_CURRENT_DIRECTORY_DESCRIPTION,
+    ),
     ("safe_resolve_path", SAFE_RESOLVE_PATH_DESCRIPTION),
     ("list_files", LS_DESCRIPTION),
     ("list_all_files", LIST_ALL_FILES_DESCRIPTION),
@@ -53,7 +55,10 @@ _TOOL_SPECS = [
     ("head_file", HEAD_FILE_DESCRIPTION),
     ("tail_file", TAIL_FILE_DESCRIPTION),
     ("get_file_tree", GET_FILE_TREE_DESCRIPTION),
-    ("build_project_context", BUILD_PROJECT_CONTEXT_DESCRIPTION),
+    (
+        "build_project_context",
+        BUILD_PROJECT_CONTEXT_DESCRIPTION,
+    ),
     ("write_file", WRITE_FILE_DESCRIPTION),
     ("append_file", APPEND_FILE_DESCRIPTION),
     ("create_file", CREATE_FILE_DESCRIPTION),
@@ -77,9 +82,12 @@ _TOOL_SPECS = [
 ]
 
 for _name, _description in _TOOL_SPECS:
-    globals()[_name] = tool(description=_description, parse_docstring=True)(
-        getattr(file_ops, _name)
-    )
+    globals()[_name] = tool(
+        description=_description, parse_docstring=True
+    )(getattr(file_ops, _name))
 
 
-__all__ = ["FILE_USAGE_INSTRUCTIONS", *[name for name, _ in _TOOL_SPECS]]
+__all__ = [
+    "FILE_USAGE_INSTRUCTIONS",
+    *[name for name, _ in _TOOL_SPECS],
+]
