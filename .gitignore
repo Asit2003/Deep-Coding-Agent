@@ -38,3 +38,8 @@ Thumbs.db
 
 # Logs
 *.log
+
+# Local planning/test artifacts
+tmp_plan_*.md
+tmp_delete_probe.txt
+pytest-cache-files-*/

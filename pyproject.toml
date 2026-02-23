@@ -27,6 +27,9 @@ packages = ["agent"]
 line-length = 88
 target-version = "py39"
 
+[tool.pytest.ini_options]
+norecursedirs = ["pytest-cache-files-*"]
+
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP"]
 
