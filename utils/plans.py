@@ -364,6 +364,17 @@ def _maybe_cleanup_plan_file(
         )
 
 
+def _validate_cleanup_request(
+    *,
+    cleanup_plan_file: bool,
+    state: dict[str, Any],
+) -> str | None:
+    """Validate cleanup preconditions before persisting state."""
+    if cleanup_plan_file and state.get("status") != "completed":
+        return "Error: cleanup_plan_file requires a completed plan"
+    return None
+
+
 def create_plan(
     task: str,
     steps: list[str] | None = None,
@@ -626,6 +637,13 @@ def track_progress(
 
     state["updated_at"] = timestamp
 
+    cleanup_validation = _validate_cleanup_request(
+        cleanup_plan_file=cleanup_plan_file,
+        state=state,
+    )
+    if cleanup_validation:
+        return cleanup_validation
+
     write_result = _write_state(plan_path, state)
     if write_result.startswith("Error:"):
         return write_result
@@ -681,6 +699,13 @@ def reflect_on_plan(
         _recompute_percent_from_steps(state)
 
     state["updated_at"] = timestamp
+
+    cleanup_validation = _validate_cleanup_request(
+        cleanup_plan_file=cleanup_plan_file,
+        state=state,
+    )
+    if cleanup_validation:
+        return cleanup_validation
 
     write_result = _write_state(plan_path, state)
     if write_result.startswith("Error:"):

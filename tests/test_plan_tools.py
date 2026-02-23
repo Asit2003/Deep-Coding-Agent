@@ -134,6 +134,40 @@ def test_track_progress_complete_and_cleanup() -> None:
                 pass
 
 
+def test_track_progress_invalid_cleanup_does_not_persist_progress() -> None:
+    plan_file = _plan_file("test_progress_invalid_cleanup")
+    plan_path = Path(plan_file)
+    try:
+        plans.create_plan(
+            task="Invalid cleanup progress",
+            steps=["Step one", "Step two"],
+            plan_file=plan_file,
+            overwrite=True,
+        )
+        initial_state = _read_state(plan_file)
+        initial_log_len = len(initial_state["progress_log"])
+
+        result = plans.track_progress(
+            message="Should not persist",
+            cleanup_plan_file=True,
+            plan_file=plan_file,
+        )
+        assert result == "Error: cleanup_plan_file requires a completed plan"
+
+        state_after = _read_state(plan_file)
+        assert len(state_after["progress_log"]) == initial_log_len
+        assert not any(
+            entry["message"] == "Should not persist"
+            for entry in state_after["progress_log"]
+        )
+    finally:
+        if plan_path.exists():
+            try:
+                plan_path.unlink()
+            except PermissionError:
+                pass
+
+
 def test_reflect_on_plan_finalize_and_cleanup() -> None:
     plan_file = _plan_file("test_reflection_cleanup")
     plan_path = Path(plan_file)
@@ -171,6 +205,36 @@ def test_reflect_on_plan_finalize_and_cleanup() -> None:
             assert finalized_state["status"] == "completed"
         else:
             assert not plan_path.exists()
+    finally:
+        if plan_path.exists():
+            try:
+                plan_path.unlink()
+            except PermissionError:
+                pass
+
+
+def test_reflect_on_plan_invalid_cleanup_does_not_persist_reflection() -> None:
+    plan_file = _plan_file("test_reflection_invalid_cleanup")
+    plan_path = Path(plan_file)
+    try:
+        plans.create_plan(
+            task="Invalid cleanup reflection",
+            steps=["Step one", "Step two"],
+            plan_file=plan_file,
+            overwrite=True,
+        )
+        initial_state = _read_state(plan_file)
+        assert len(initial_state["reflections"]) == 0
+
+        result = plans.reflect_on_plan(
+            summary="Should not persist",
+            cleanup_plan_file=True,
+            plan_file=plan_file,
+        )
+        assert result == "Error: cleanup_plan_file requires a completed plan"
+
+        state_after = _read_state(plan_file)
+        assert len(state_after["reflections"]) == 0
     finally:
         if plan_path.exists():
             try:
