@@ -375,6 +375,146 @@ def _validate_cleanup_request(
     return None
 
 
+def _normalize_task_text(task: str) -> str:
+    """Normalize task text for stable comparisons."""
+    return " ".join(str(task).split()).strip()
+
+
+def verify_plan_file(
+    task: str,
+    plan_file: str = DEFAULT_PLAN_FILE,
+    max_steps: int = 6,
+) -> str:
+    """Ensure plan file exists, is readable, and matches the current request."""
+    task_text = _normalize_task_text(task)
+    if not task_text:
+        return "Error: task must not be empty"
+    if max_steps <= 0:
+        return "Error: max_steps must be > 0"
+
+    try:
+        plan_path = _resolve_workspace_path(plan_file)
+    except ValueError as err:
+        return f"Error: {err}"
+
+    relative_path = _to_workspace_relative(plan_path)
+
+    if not plan_path.exists():
+        steps = decompose_task(task_text, max_steps=max_steps)
+        if steps and steps[0].startswith("Error:"):
+            return steps[0]
+        created = create_plan(
+            task=task_text,
+            steps=steps,
+            plan_file=plan_file,
+            overwrite=False,
+        )
+        if created.startswith("Error:"):
+            return created
+        return f"Verified plan file by creating {relative_path}"
+
+    if not plan_path.is_file():
+        return f"Error: '{plan_file}' is not a file"
+
+    try:
+        content = plan_path.read_text(encoding="utf-8")
+    except OSError as err:
+        return f"Error: Unable to read '{plan_file}': {err}"
+
+    try:
+        state = _load_state_from_markdown(content)
+    except ValueError:
+        steps = decompose_task(task_text, max_steps=max_steps)
+        if steps and steps[0].startswith("Error:"):
+            return steps[0]
+        recreated = create_plan(
+            task=task_text,
+            steps=steps,
+            plan_file=plan_file,
+            overwrite=True,
+        )
+        if recreated.startswith("Error:"):
+            return recreated
+        return f"Verified plan file by recreating corrupted content in {relative_path}"
+
+    if _normalize_task_text(state.get("task", "")) != task_text:
+        steps = decompose_task(task_text, max_steps=max_steps)
+        if steps and steps[0].startswith("Error:"):
+            return steps[0]
+        synced = create_plan(
+            task=task_text,
+            steps=steps,
+            plan_file=plan_file,
+            overwrite=True,
+        )
+        if synced.startswith("Error:"):
+            return synced
+        return f"Verified plan file by syncing task in {relative_path}"
+
+    changed = False
+    change_reasons: list[str] = []
+
+    steps = state.get("steps", [])
+    if not steps:
+        regenerated_steps = decompose_task(task_text, max_steps=max_steps)
+        if regenerated_steps and regenerated_steps[0].startswith("Error:"):
+            return regenerated_steps[0]
+        state["steps"] = _build_plan_items(regenerated_steps)
+        if state["steps"]:
+            state["steps"][0]["status"] = "in_progress"
+        changed = True
+        change_reasons.append("regenerated missing steps")
+    else:
+        in_progress_indices = [
+            idx for idx, item in enumerate(steps) if item.get("status") == "in_progress"
+        ]
+        if len(in_progress_indices) > 1:
+            for idx in in_progress_indices[1:]:
+                steps[idx]["status"] = "pending"
+            changed = True
+            change_reasons.append("normalized multiple in_progress steps")
+
+    previous_percent = state.get("percent_complete")
+    _recompute_percent_from_steps(state)
+    if state.get("percent_complete") != previous_percent:
+        changed = True
+        change_reasons.append("recomputed percent_complete")
+
+    expected_status = (
+        "completed"
+        if state.get("steps")
+        and all(item.get("status") == "completed" for item in state["steps"])
+        else "active"
+    )
+    if state.get("status") != expected_status:
+        state["status"] = expected_status
+        changed = True
+        change_reasons.append("aligned plan status")
+
+    if not changed:
+        return f"Verified plan file (no updates required) in {relative_path}"
+
+    timestamp = _now_utc_iso()
+    state["updated_at"] = timestamp
+    reason_text = ", ".join(change_reasons) or "normalized state"
+    state.setdefault("progress_log", []).append(
+        {
+            "timestamp": timestamp,
+            "message": (
+                "Plan auto-verified before run and updated: "
+                f"{reason_text}."
+            ),
+            "percent_complete": state.get("percent_complete"),
+        }
+    )
+
+    write_result = _write_state(plan_path, state)
+    if write_result.startswith("Error:"):
+        return write_result
+
+    return f"Verified plan file and applied updates in {relative_path}"
+
+
 def create_plan(
     task: str,
     steps: list[str] | None = None,
