@@ -198,9 +198,7 @@ def run_shell_command(
         stdout = _truncate_output((err.stdout or "").strip(), max_output_chars)
         stderr = _truncate_output((err.stderr or "").strip(), max_output_chars)
         message = (
-            stderr
-            or stdout
-            or f"Command timed out after {timeout_seconds} second(s)"
+            stderr or stdout or f"Command timed out after {timeout_seconds} second(s)"
         )
         return {
             "ok": False,

@@ -12,13 +12,34 @@ from config import AgentConfig
 WORKSPACE_ROOT = Path(__file__).resolve().parents[1]
 
 
+def _resolve_test_directory(path_value: str | None) -> Path:
+    """Resolve a test working directory inside the repository workspace."""
+    if not path_value or not str(path_value).strip():
+        return WORKSPACE_ROOT
+
+    raw_path = Path(str(path_value).strip()).expanduser()
+    resolved = (
+        raw_path.resolve()
+        if raw_path.is_absolute()
+        else (WORKSPACE_ROOT / raw_path).resolve()
+    )
+    try:
+        resolved.relative_to(WORKSPACE_ROOT)
+    except ValueError as err:
+        raise ValueError(
+            f"Test working directory '{path_value}' is outside workspace root "
+            f"'{WORKSPACE_ROOT.as_posix()}'"
+        ) from err
+    return resolved
+
+
 @dataclass
 class TestRunner:
     """Runs repository test command and captures diagnostics."""
 
     config: AgentConfig
 
-    def run(self) -> dict[str, Any]:
+    def run(self, cwd: str | None = None) -> dict[str, Any]:
         """Execute configured test command and return structured output."""
         command = self.config.run_tests_command.strip()
         if not command:
@@ -29,9 +50,18 @@ class TestRunner:
             }
 
         try:
+            test_directory = _resolve_test_directory(cwd)
+        except ValueError as err:
+            return {
+                "passed": False,
+                "exit_code": -1,
+                "output": str(err),
+            }
+
+        try:
             completed = subprocess.run(
                 command,
-                cwd=WORKSPACE_ROOT,
+                cwd=test_directory,
                 shell=True,
                 check=False,
                 capture_output=True,

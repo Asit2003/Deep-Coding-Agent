@@ -1,6 +1,8 @@
 import json
 from pathlib import Path
 
+from tools.plan_tools import make_scoped_plan_tools
+from tools.todo_tools import make_scoped_todo_tools
 from utils import plans
 
 
@@ -13,6 +15,13 @@ def _read_state(plan_file: str) -> dict:
 
 def _plan_file(name: str) -> str:
     return f"tmp_plan_{name}.md"
+
+
+def _tool_by_name(tools: list[object], name: str):
+    for tool in tools:
+        if getattr(tool, "name", "") == name:
+            return tool
+    raise AssertionError(f"Tool '{name}' not found")
 
 
 def test_create_plan_and_update_step() -> None:
@@ -196,10 +205,9 @@ def test_reflect_on_plan_finalize_and_cleanup() -> None:
             cleanup_plan_file=True,
             plan_file=plan_file,
         )
-        assert (
-            finalized.startswith("Completed plan and removed")
-            or finalized.startswith("Warning: Plan completed but cleanup failed")
-        )
+        assert finalized.startswith(
+            "Completed plan and removed"
+        ) or finalized.startswith("Warning: Plan completed but cleanup failed")
         if plan_path.exists():
             finalized_state = _read_state(plan_file)
             assert finalized_state["status"] == "completed"
@@ -357,6 +365,36 @@ def test_verify_plan_file_normalizes_inconsistent_status() -> None:
             "Plan auto-verified before run and updated" in entry["message"]
             for entry in normalized_state["progress_log"]
         )
+    finally:
+        if plan_path.exists():
+            try:
+                plan_path.unlink()
+            except PermissionError:
+                pass
+
+
+def test_scoped_plan_and_todo_tools_use_bound_plan_file() -> None:
+    plan_file = _plan_file("scoped_tools")
+    plan_path = Path(plan_file)
+    try:
+        plan_tools = make_scoped_plan_tools(plan_file)
+        todo_tools = make_scoped_todo_tools(plan_file)
+
+        create_plan_tool = _tool_by_name(plan_tools, "create_plan")
+        create_result = create_plan_tool.invoke(
+            {
+                "task": "Scoped tool task",
+                "steps": ["Inspect code", "Ship fix"],
+                "overwrite": True,
+            }
+        )
+        assert create_result.startswith("Created plan")
+        assert plan_path.exists()
+
+        overview_tool = _tool_by_name(todo_tools, "get_plan_overview")
+        overview = overview_tool.invoke({})
+        assert overview["task"] == "Scoped tool task"
+        assert overview["num_steps"] == 2
     finally:
         if plan_path.exists():
             try:

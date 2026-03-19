@@ -10,32 +10,40 @@ readme = "Readme.md"
 requires-python = ">=3.11,<4.0"
 dependencies = [
     "deepagents>=0.4.3",
+    "fastapi>=0.115.0",
+    "jsonpatch>=1.33",
     "langchain-core>=0.3.0",
     "langchain-openai>=0.3.0",
     "langgraph>=0.2.0",
     "openai>=1.0.0",
     "python-dotenv>=1.0.0",
+    "uvicorn>=0.30.0",
 ]
 
 [project.scripts]
 deep-agent = "agent.orchestrator:main"
+deep-agent-api = "agent_api.main:main"
 
 [dependency-groups]
 prod = [
     "deepagents>=0.4.3",
+    "fastapi>=0.115.0",
+    "jsonpatch>=1.33",
     "langchain-core>=0.3.0",
     "langchain-openai>=0.3.0",
     "langgraph>=0.2.0",
     "openai>=1.0.0",
     "python-dotenv>=1.0.0",
+    "uvicorn>=0.30.0",
 ]
 dev = [
+    "httpx>=0.27.0",
     "pytest>=8.0.0",
     "ruff>=0.6.0"
 ]
 
 [tool.setuptools]
-packages = ["agent", "tools", "utils"]
+packages = ["agent", "agent_api", "agent_api.routers", "tools", "utils"]
 py-modules = ["config"]
 
 [tool.ruff]

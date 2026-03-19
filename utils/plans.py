@@ -500,10 +500,7 @@ def verify_plan_file(
     state.setdefault("progress_log", []).append(
         {
             "timestamp": timestamp,
-            "message": (
-                "Plan auto-verified before run and updated: "
-                f"{reason_text}."
-            ),
+            "message": (f"Plan auto-verified before run and updated: {reason_text}."),
             "percent_complete": state.get("percent_complete"),
         }
     )
@@ -583,9 +580,7 @@ def update_plan(
     if step_number < 1:
         return "Error: step_number must be >= 1"
     if status not in VALID_STATUSES:
-        return (
-            "Error: status must be one of: pending, in_progress, completed, blocked"
-        )
+        return "Error: status must be one of: pending, in_progress, completed, blocked"
 
     plan_path, state, error = _read_existing_state(plan_file)
     if error:
@@ -597,10 +592,7 @@ def update_plan(
     if not steps:
         return "Error: Plan has no steps to update"
     if step_number > len(steps):
-        return (
-            f"Error: step_number {step_number} is out of range "
-            f"(1..{len(steps)})"
-        )
+        return f"Error: step_number {step_number} is out of range (1..{len(steps)})"
 
     if status == "in_progress":
         for idx, item in enumerate(steps, start=1):
