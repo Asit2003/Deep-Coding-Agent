@@ -45,3 +45,6 @@ tmp_delete_probe.txt
 pytest-cache-files-*/
 
 .env
+
+project/
+project/*
