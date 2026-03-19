@@ -110,9 +110,9 @@ class PlannerAgent:
             return None
         return OpenAI(api_key=self.config.api_key, base_url=self.config.base_url)
 
-    def _build_project_context(self) -> str:
+    def _build_project_context(self, directory: str = ".") -> str:
         listing = file_ops.safe_list_files(
-            directory=".",
+            directory=directory,
             max_file_size=50_000,
             include_hidden=False,
         )
@@ -136,6 +136,7 @@ class PlannerAgent:
         self,
         user_request: str,
         project_root: str | None = None,
+        context_directory: str | None = None,
     ) -> dict[str, Any]:
         """Generate a dependency-aware plan and persist it to markdown."""
         request = user_request.strip()
@@ -165,7 +166,9 @@ class PlannerAgent:
             prompt = PLANNER_USER_PROMPT.format(
                 user_request=request,
                 project_root=resolved_project_root,
-                project_context=self._build_project_context(),
+                project_context=self._build_project_context(
+                    context_directory or resolved_project_root
+                ),
             )
             try:
                 response = client.chat.completions.create(

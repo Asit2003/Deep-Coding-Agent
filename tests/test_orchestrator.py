@@ -6,6 +6,7 @@ from agent.orchestrator import (
     derive_project_name,
     merge_task_results,
     partition_tasks,
+    resolve_project_target,
 )
 from config import AgentConfig
 
@@ -86,6 +87,18 @@ def test_build_project_root_uses_configured_base_path() -> None:
     assert root == "workspace/apps/my-portal"
 
 
+def test_resolve_project_target_prefers_explicit_working_directory() -> None:
+    project_name, project_root = resolve_project_target(
+        configured_projects_root="project",
+        user_request="Build a customer support API",
+        project_name="",
+        working_directory="apps/support-api",
+    )
+
+    assert project_name == "support-api"
+    assert project_root == "apps/support-api"
+
+
 def test_run_verifies_plan_file_before_graph_invoke(monkeypatch) -> None:
     config = AgentConfig(
         api_key="stub-openai-key",
@@ -107,10 +120,11 @@ def test_run_verifies_plan_file_before_graph_invoke(monkeypatch) -> None:
 
     monkeypatch.setattr("agent.orchestrator.plan_ops.verify_plan_file", _fake_verify)
     orchestrator.graph = SimpleNamespace(invoke=_fake_invoke)
+    orchestrator.graph_project_root = "project/demo"
     monkeypatch.setattr(
         orchestrator.test_runner,
         "run",
-        lambda: {"passed": True, "exit_code": 0, "output": "ok"},
+        lambda cwd=None: {"passed": True, "exit_code": 0, "output": f"ok:{cwd}"},
     )
 
     result = orchestrator.run("Build endpoint", project_name="demo")
@@ -118,6 +132,8 @@ def test_run_verifies_plan_file_before_graph_invoke(monkeypatch) -> None:
     assert "Deep agent done" in result["final_summary"]
     assert captured_payload
     assert "Build endpoint" in captured_payload[0]["messages"][0]["content"]
+    assert result["project_root"] == "project/demo"
+    assert result["working_directory"] == "project/demo"
     assert verify_calls == [
         ("Build endpoint", "tmp_plan_orchestrator_verify.md", config.planning_max_steps)
     ]

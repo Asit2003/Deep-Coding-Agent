@@ -23,6 +23,7 @@ class AgentState(TypedDict, total=False):
 
     user_request: str
     project_name: str
+    working_directory: str
     project_root: str
     plan_file: str
 

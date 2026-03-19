@@ -196,10 +196,9 @@ def test_reflect_on_plan_finalize_and_cleanup() -> None:
             cleanup_plan_file=True,
             plan_file=plan_file,
         )
-        assert (
-            finalized.startswith("Completed plan and removed")
-            or finalized.startswith("Warning: Plan completed but cleanup failed")
-        )
+        assert finalized.startswith(
+            "Completed plan and removed"
+        ) or finalized.startswith("Warning: Plan completed but cleanup failed")
         if plan_path.exists():
             finalized_state = _read_state(plan_file)
             assert finalized_state["status"] == "completed"

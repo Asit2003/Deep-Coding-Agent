@@ -166,6 +166,54 @@ def build_project_root(projects_root: str, project_name: str) -> str:
     return f"{normalized_root}/{normalized_project}"
 
 
+def normalize_working_directory(path_value: str) -> str:
+    """Normalize a working directory into a workspace-relative POSIX path."""
+    raw_value = str(path_value).strip()
+    if not raw_value:
+        raise ValueError("Working directory must not be empty")
+
+    raw_path = Path(raw_value).expanduser()
+    resolved = (
+        raw_path.resolve()
+        if raw_path.is_absolute()
+        else (WORKSPACE_ROOT / raw_path).resolve()
+    )
+    try:
+        relative = resolved.relative_to(WORKSPACE_ROOT)
+    except ValueError as err:
+        raise ValueError(
+            f"Working directory '{path_value}' is outside workspace root "
+            f"'{WORKSPACE_ROOT.as_posix()}'"
+        ) from err
+
+    normalized = relative.as_posix()
+    return normalized if normalized and normalized != "." else "."
+
+
+def resolve_project_target(
+    *,
+    configured_projects_root: str,
+    user_request: str,
+    project_name: str = "",
+    working_directory: str = "",
+) -> tuple[str, str]:
+    """Resolve the effective project name and workspace-relative directory."""
+    request_project_name = _slugify_project_name(
+        project_name or derive_project_name(user_request)
+    )
+    if working_directory.strip():
+        normalized_directory = normalize_working_directory(working_directory)
+        directory_name = Path(normalized_directory).name
+        effective_project_name = _slugify_project_name(
+            project_name or directory_name or request_project_name
+        )
+        return effective_project_name, normalized_directory
+
+    return request_project_name, build_project_root(
+        configured_projects_root, request_project_name
+    )
+
+
 def derive_project_name(user_request: str) -> str:
     """Derive a project name hint from user request text."""
     text = " ".join(user_request.split()).strip()
@@ -330,6 +378,7 @@ class CodingOrchestrator:
 
     config: AgentConfig | None = None
     graph: Any | None = field(default=None, init=False)
+    graph_project_root: str | None = field(default=None, init=False)
     test_runner: TestRunner = field(init=False)
 
     def __post_init__(self) -> None:
@@ -400,9 +449,16 @@ class CodingOrchestrator:
             ]
         )
 
-    def run(self, user_request: str, project_name: str | None = None) -> AgentState:
+    def run(
+        self,
+        user_request: str,
+        project_name: str | None = None,
+        working_directory: str | None = None,
+    ) -> AgentState:
         """Invoke Deep Agents workflow for a user request."""
         normalized_request = user_request.strip()
+        raw_project_name = str(project_name or "").strip()
+        raw_working_directory = str(working_directory or "").strip()
         verify_result = plan_ops.verify_plan_file(
             task=normalized_request,
             plan_file=str(self.config.plan_file),
@@ -411,7 +467,8 @@ class CodingOrchestrator:
         if verify_result.startswith("Error:"):
             return {
                 "user_request": normalized_request,
-                "project_name": (project_name or "").strip(),
+                "project_name": raw_project_name,
+                "working_directory": raw_working_directory,
                 "plan_file": str(self.config.plan_file),
                 "final_summary": f"Plan preflight failed: {verify_result}",
             }
@@ -419,19 +476,27 @@ class CodingOrchestrator:
         if not str(self.config.api_key or "").strip():
             return {
                 "user_request": normalized_request,
-                "project_name": (project_name or "").strip(),
+                "project_name": raw_project_name,
+                "working_directory": raw_working_directory,
                 "plan_file": str(self.config.plan_file),
                 "final_summary": "Execution blocked: OPENAI_API_KEY is not configured.",
             }
 
-        raw_project_name = str(project_name or "").strip()
-        resolved_project_name = _slugify_project_name(
-            raw_project_name or derive_project_name(normalized_request)
-        )
-        project_root = build_project_root(
-            str(self.config.projects_root),
-            resolved_project_name,
-        )
+        try:
+            resolved_project_name, project_root = resolve_project_target(
+                configured_projects_root=str(self.config.projects_root),
+                user_request=normalized_request,
+                project_name=raw_project_name,
+                working_directory=raw_working_directory,
+            )
+        except ValueError as err:
+            return {
+                "user_request": normalized_request,
+                "project_name": raw_project_name,
+                "working_directory": raw_working_directory,
+                "plan_file": str(self.config.plan_file),
+                "final_summary": f"Execution blocked: {err}",
+            }
 
         make_result = file_ops.make_directory(
             path=project_root,
@@ -442,18 +507,21 @@ class CodingOrchestrator:
             return {
                 "user_request": normalized_request,
                 "project_name": resolved_project_name,
+                "working_directory": project_root,
                 "project_root": project_root,
                 "plan_file": str(self.config.plan_file),
                 "final_summary": f"Execution blocked: {make_result}",
             }
 
-        if self.graph is None:
+        if self.graph is None or self.graph_project_root != project_root:
             try:
                 self.graph = self._build_deep_agent(project_root=project_root)
+                self.graph_project_root = project_root
             except Exception as err:  # noqa: BLE001
                 return {
                     "user_request": normalized_request,
                     "project_name": resolved_project_name,
+                    "working_directory": project_root,
                     "project_root": project_root,
                     "plan_file": str(self.config.plan_file),
                     "final_summary": f"Failed to initialize Deep Agent: {err}",
@@ -478,6 +546,7 @@ class CodingOrchestrator:
             return {
                 "user_request": normalized_request,
                 "project_name": resolved_project_name,
+                "working_directory": project_root,
                 "project_root": project_root,
                 "plan_file": str(self.config.plan_file),
                 "final_summary": f"Deep Agent execution failed: {err}",
@@ -488,7 +557,7 @@ class CodingOrchestrator:
         if not agent_summary:
             agent_summary = "(Deep Agent returned no textual summary.)"
 
-        tests_result = self.test_runner.run()
+        tests_result = self.test_runner.run(cwd=project_root)
         tests_passed = bool(tests_result.get("passed", False))
         tests_exit_code = int(tests_result.get("exit_code", -1))
         tests_output = str(tests_result.get("output", "")).strip()
@@ -507,6 +576,7 @@ class CodingOrchestrator:
         return {
             "user_request": normalized_request,
             "project_name": resolved_project_name,
+            "working_directory": project_root,
             "project_root": project_root,
             "plan_file": str(self.config.plan_file),
             "tests_passed": tests_passed,
@@ -515,9 +585,18 @@ class CodingOrchestrator:
             "final_summary": final_summary,
         }
 
-    def invoke(self, user_request: str, project_name: str | None = None) -> AgentState:
+    def invoke(
+        self,
+        user_request: str,
+        project_name: str | None = None,
+        working_directory: str | None = None,
+    ) -> AgentState:
         """Alias to `run()` for API ergonomics."""
-        return self.run(user_request, project_name=project_name)
+        return self.run(
+            user_request,
+            project_name=project_name,
+            working_directory=working_directory,
+        )
 
 
 def main() -> None:
@@ -534,10 +613,19 @@ def main() -> None:
             "AGENT_PROJECTS_ROOT."
         ),
     )
+    parser.add_argument(
+        "--working-directory",
+        default="",
+        help="Optional workspace-relative directory where the agent should work.",
+    )
     args = parser.parse_args()
 
     orchestrator = CodingOrchestrator()
-    result = orchestrator.run(args.request, project_name=args.project_name)
+    result = orchestrator.run(
+        args.request,
+        project_name=args.project_name,
+        working_directory=args.working_directory,
+    )
     print(result.get("final_summary", "(no summary generated)"))
 
 

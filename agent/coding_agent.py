@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 import json
 import posixpath
 import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
-from typing import Any, Callable
+from typing import Any
 
 from openai import OpenAI
 
@@ -65,26 +66,32 @@ def _safe_json_dumps(value: Any) -> str:
 
 def _scope_project_path(path_value: str, project_root: str) -> str:
     """Scope a relative path under the task project root."""
-    root = project_root.replace("\\", "/").strip().strip("/")
-    if not root:
-        raise ValueError("Project root must not be empty")
+    root_input = project_root.replace("\\", "/").strip()
+    root = posixpath.normpath(root_input or ".")
+    if root in {"", "/"}:
+        root = "."
 
     raw = str(path_value).strip().replace("\\", "/")
-    if raw in {"", ".", "./"}:
-        scoped = root
-    elif raw.startswith(f"{root}/") or raw == root:
-        scoped = raw
+    if root == ".":
+        if raw in {"", ".", "./"}:
+            scoped = "."
+        else:
+            trimmed = raw.lstrip("/").removeprefix("./")
+            scoped = trimmed or "."
     else:
-        trimmed = raw.lstrip("/").removeprefix("./")
-        scoped = f"{root}/{trimmed}" if trimmed else root
+        if raw in {"", ".", "./"}:
+            scoped = root
+        elif raw.startswith(f"{root}/") or raw == root:
+            scoped = raw
+        else:
+            trimmed = raw.lstrip("/").removeprefix("./")
+            scoped = f"{root}/{trimmed}" if trimmed else root
 
     normalized = posixpath.normpath(scoped)
     if normalized in {"", ".", ".."} or normalized.startswith("../"):
         raise ValueError(f"Invalid path '{path_value}'")
-    if not (normalized == root or normalized.startswith(f"{root}/")):
-        raise ValueError(
-            f"Path '{path_value}' must stay within '{root}'"
-        )
+    if root != "." and not (normalized == root or normalized.startswith(f"{root}/")):
+        raise ValueError(f"Path '{path_value}' must stay within '{root}'")
     return normalized
 
 
@@ -129,9 +136,7 @@ class DeepCodingAgent:
                 create_dirs=create_dirs,
             )
 
-        def _append_file(
-            file_path: str, content: str, create_dirs: bool = True
-        ) -> str:
+        def _append_file(file_path: str, content: str, create_dirs: bool = True) -> str:
             scoped = _scope_or_error(file_path)
             return file_ops.append_file(
                 file_path=scoped,
@@ -301,9 +306,7 @@ class DeepCodingAgent:
                     "properties": {
                         "path": {
                             "type": "string",
-                            "description": (
-                                f"Directory path inside '{project_root}'."
-                            ),
+                            "description": (f"Directory path inside '{project_root}'."),
                         },
                         "parents": {"type": "boolean", "default": True},
                         "exist_ok": {"type": "boolean", "default": True},
@@ -454,10 +457,7 @@ class DeepCodingAgent:
                 if str(self.config.provider).strip().lower() == "gemini"
                 else "OPENAI_API_KEY"
             )
-            summary = (
-                f"No {key_name} configured for coding "
-                "execution."
-            )
+            summary = f"No {key_name} configured for coding execution."
             plan_ops.update_plan(
                 step_number=task_id,
                 status="blocked",

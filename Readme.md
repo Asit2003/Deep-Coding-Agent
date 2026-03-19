@@ -39,3 +39,31 @@ orchestrator = CodingOrchestrator()
 result = orchestrator.run("Implement feature X with tests")
 print(result["final_summary"])
 ```
+
+You can also target a specific workspace directory:
+
+```bash
+deep-agent "Implement feature X with tests" --working-directory apps/feature-x
+```
+
+## API
+
+Start the FastAPI service:
+
+```bash
+deep-agent-api
+```
+
+Create a run:
+
+```bash
+curl -X POST http://127.0.0.1:8000/api/v1/agent/runs \
+  -H "Content-Type: application/json" \
+  -d "{\"prompt\":\"Build a FastAPI endpoint\",\"working_directory\":\"project/api-demo\"}"
+```
+
+Check run status:
+
+```bash
+curl http://127.0.0.1:8000/api/v1/agent/runs/<run_id>
+```
