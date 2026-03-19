@@ -250,3 +250,116 @@ def test_decompose_task_returns_steps() -> None:
     )
     assert not any(step.startswith("Error:") for step in steps)
     assert 2 <= len(steps) <= 4
+
+
+def test_verify_plan_file_creates_when_missing() -> None:
+    plan_file = _plan_file("verify_create")
+    plan_path = Path(plan_file)
+    try:
+        if plan_path.exists():
+            plan_path.unlink()
+
+        result = plans.verify_plan_file(
+            task="Build endpoint and tests",
+            plan_file=plan_file,
+        )
+        assert result.startswith("Verified plan file by creating")
+        assert plan_path.exists()
+
+        state = _read_state(plan_file)
+        assert state["task"] == "Build endpoint and tests"
+        assert len(state["steps"]) >= 2
+    finally:
+        if plan_path.exists():
+            try:
+                plan_path.unlink()
+            except PermissionError:
+                pass
+
+
+def test_verify_plan_file_repairs_corrupted_state() -> None:
+    plan_file = _plan_file("verify_repair_corrupt")
+    plan_path = Path(plan_file)
+    try:
+        plan_path.write_text("# Corrupted file\nmissing markers", encoding="utf-8")
+
+        result = plans.verify_plan_file(
+            task="Repair this plan",
+            plan_file=plan_file,
+        )
+        assert result.startswith("Verified plan file by recreating corrupted content")
+
+        state = _read_state(plan_file)
+        assert state["task"] == "Repair this plan"
+        assert state["status"] == "active"
+    finally:
+        if plan_path.exists():
+            try:
+                plan_path.unlink()
+            except PermissionError:
+                pass
+
+
+def test_verify_plan_file_syncs_task_when_request_changes() -> None:
+    plan_file = _plan_file("verify_sync_task")
+    plan_path = Path(plan_file)
+    try:
+        plans.create_plan(
+            task="Old request",
+            steps=["Old step 1", "Old step 2"],
+            plan_file=plan_file,
+            overwrite=True,
+        )
+
+        result = plans.verify_plan_file(
+            task="New request",
+            plan_file=plan_file,
+        )
+        assert result.startswith("Verified plan file by syncing task")
+
+        state = _read_state(plan_file)
+        assert state["task"] == "New request"
+        assert state["steps"][0]["status"] == "in_progress"
+    finally:
+        if plan_path.exists():
+            try:
+                plan_path.unlink()
+            except PermissionError:
+                pass
+
+
+def test_verify_plan_file_normalizes_inconsistent_status() -> None:
+    plan_file = _plan_file("verify_normalize")
+    plan_path = Path(plan_file)
+    try:
+        plans.create_plan(
+            task="Normalize status",
+            steps=["Step 1", "Step 2"],
+            plan_file=plan_file,
+            overwrite=True,
+        )
+
+        state = _read_state(plan_file)
+        state["status"] = "completed"
+        state["percent_complete"] = 100
+        plan_path.write_text(plans._serialize_markdown(state), encoding="utf-8")
+
+        result = plans.verify_plan_file(
+            task="Normalize status",
+            plan_file=plan_file,
+        )
+        assert result.startswith("Verified plan file and applied updates")
+
+        normalized_state = _read_state(plan_file)
+        assert normalized_state["status"] == "active"
+        assert normalized_state["percent_complete"] < 100
+        assert any(
+            "Plan auto-verified before run and updated" in entry["message"]
+            for entry in normalized_state["progress_log"]
+        )
+    finally:
+        if plan_path.exists():
+            try:
+                plan_path.unlink()
+            except PermissionError:
+                pass

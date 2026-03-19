@@ -43,3 +43,5 @@ Thumbs.db
 tmp_plan_*.md
 tmp_delete_probe.txt
 pytest-cache-files-*/
+
+.env

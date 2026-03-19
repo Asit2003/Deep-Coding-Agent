@@ -27,7 +27,7 @@ _TOOL_SPECS = [
 ]
 
 for _name, _description in _TOOL_SPECS:
-    globals()[_name] = tool(description=_description, parse_docstring=True)(
+    globals()[_name] = tool(description=_description, parse_docstring=False)(
         getattr(plan_ops, _name)
     )
 

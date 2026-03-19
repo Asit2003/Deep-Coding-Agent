@@ -7,13 +7,27 @@ name = "deep"
 version = "0.1.0"
 description = "Coding agent workspace"
 readme = "Readme.md"
-requires-python = ">=3.9"
+requires-python = ">=3.11,<4.0"
+dependencies = [
+    "deepagents>=0.4.3",
+    "langchain-core>=0.3.0",
+    "langchain-openai>=0.3.0",
+    "langgraph>=0.2.0",
+    "openai>=1.0.0",
+    "python-dotenv>=1.0.0",
+]
+
+[project.scripts]
+deep-agent = "agent.orchestrator:main"
 
 [dependency-groups]
 prod = [
+    "deepagents>=0.4.3",
     "langchain-core>=0.3.0",
+    "langchain-openai>=0.3.0",
     "langgraph>=0.2.0",
-    "openai>=1.0.0"
+    "openai>=1.0.0",
+    "python-dotenv>=1.0.0",
 ]
 dev = [
     "pytest>=8.0.0",
@@ -21,14 +35,16 @@ dev = [
 ]
 
 [tool.setuptools]
-packages = ["agent"]
+packages = ["agent", "tools", "utils"]
+py-modules = ["config"]
 
 [tool.ruff]
 line-length = 88
-target-version = "py39"
+target-version = "py311"
 
 [tool.pytest.ini_options]
 norecursedirs = ["pytest-cache-files-*"]
+testpaths = ["tests"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP"]
