@@ -52,15 +52,10 @@ def _iter_files(
         dirs[:] = [
             entry
             for entry in dirs
-            if entry not in ignored
-            and (
-                include_hidden or not entry.startswith(".")
-            )
+            if entry not in ignored and (include_hidden or not entry.startswith("."))
         ]
         for file_name in files:
-            if not include_hidden and file_name.startswith(
-                "."
-            ):
+            if not include_hidden and file_name.startswith("."):
                 continue
             yield Path(current_root) / file_name
 
@@ -118,22 +113,16 @@ def _safe_list_files_impl(
     return collected
 
 
-def _format_numbered_lines(
-    lines: list[str], start: int, end: Optional[int]
-) -> str:
+def _format_numbered_lines(lines: list[str], start: int, end: Optional[int]) -> str:
     """Render a line slice with 1-based line numbers."""
-    stop = (
-        len(lines) if end is None else min(end, len(lines))
-    )
+    stop = len(lines) if end is None else min(end, len(lines))
     result = []
     for idx in range(start - 1, stop):
         result.append(f"{idx + 1:6d}\t{lines[idx]}")
     return "\n".join(result)
 
 
-def _read_file_lines_impl(
-    file_path: str, start: int, end: Optional[int]
-) -> str:
+def _read_file_lines_impl(file_path: str, start: int, end: Optional[int]) -> str:
     """Core implementation for range-based line reads."""
     if start < 1:
         return "Error: start must be >= 1"
@@ -196,14 +185,10 @@ def list_files(directory: str = ".") -> list[str]:
             key=lambda p: p.name.lower(),
         ):
             rel = _to_workspace_relative(item)
-            entries.append(
-                f"{rel}/" if item.is_dir() else rel
-            )
+            entries.append(f"{rel}/" if item.is_dir() else rel)
         return entries
     except OSError as err:
-        return [
-            f"Error: Unable to list '{directory}': {err}"
-        ]
+        return [f"Error: Unable to list '{directory}': {err}"]
 
 
 def list_all_files(directory: str = ".") -> list[str]:
@@ -219,9 +204,7 @@ def list_all_files(directory: str = ".") -> list[str]:
         return [f"Error: '{directory}' is not a directory"]
 
     files = [
-        _to_workspace_relative(path)
-        for path in target_dir.rglob("*")
-        if path.is_file()
+        _to_workspace_relative(path) for path in target_dir.rglob("*") if path.is_file()
     ]
     files.sort()
     return files
@@ -266,18 +249,14 @@ def read_file_lines(
     end: Optional[int] = None,
 ) -> str:
     """Read selected lines from a file."""
-    return _read_file_lines_impl(
-        file_path=file_path, start=start, end=end
-    )
+    return _read_file_lines_impl(file_path=file_path, start=start, end=end)
 
 
 def head_file(file_path: str, n: int = 50) -> str:
     """Return file head."""
     if n <= 0:
         return "Error: n must be > 0"
-    return _read_file_lines_impl(
-        file_path=file_path, start=1, end=n
-    )
+    return _read_file_lines_impl(file_path=file_path, start=1, end=n)
 
 
 def tail_file(file_path: str, n: int = 50) -> str:
@@ -304,14 +283,10 @@ def tail_file(file_path: str, n: int = 50) -> str:
         return "System reminder: File exists but has empty contents"
 
     start_line = max(1, len(lines) - n + 1)
-    return _format_numbered_lines(
-        lines, start_line, len(lines)
-    )
+    return _format_numbered_lines(lines, start_line, len(lines))
 
 
-def get_file_tree(
-    directory: str = ".", indent_unit: str = "    "
-) -> str:
+def get_file_tree(directory: str = ".", indent_unit: str = "    ") -> str:
     """Return a recursive file tree."""
     try:
         target_dir = _resolve_workspace_path(directory)
@@ -331,9 +306,7 @@ def get_file_tree(
             key=lambda p: (not p.is_dir(), p.name.lower()),
         ):
             marker = "/" if item.is_dir() else ""
-            lines.append(
-                f"{indent_unit * level}{item.name}{marker}"
-            )
+            lines.append(f"{indent_unit * level}{item.name}{marker}")
             if item.is_dir():
                 walk(item, level + 1)
 
@@ -348,11 +321,7 @@ def build_project_context(directory: str = ".") -> str:
         max_file_size=MAX_FILE_SIZE,
         include_hidden=False,
     )
-    if (
-        isinstance(files, list)
-        and files
-        and files[0].startswith("Error:")
-    ):
+    if isinstance(files, list) and files and files[0].startswith("Error:"):
         return files[0]
 
     context = "Project File List:\n"
@@ -380,20 +349,14 @@ def write_file(
 
     try:
         if create_dirs:
-            resolved.parent.mkdir(
-                parents=True, exist_ok=True
-            )
+            resolved.parent.mkdir(parents=True, exist_ok=True)
         resolved.write_text(content, encoding="utf-8")
         return f"Updated file {_to_workspace_relative(resolved)}"
     except OSError as err:
-        return (
-            f"Error: Unable to write '{file_path}': {err}"
-        )
+        return f"Error: Unable to write '{file_path}': {err}"
 
 
-def append_file(
-    file_path: str, content: str, create_dirs: bool = True
-) -> str:
+def append_file(file_path: str, content: str, create_dirs: bool = True) -> str:
     """Append content to a file."""
     try:
         resolved = _resolve_workspace_path(file_path)
@@ -405,16 +368,12 @@ def append_file(
 
     try:
         if create_dirs:
-            resolved.parent.mkdir(
-                parents=True, exist_ok=True
-            )
+            resolved.parent.mkdir(parents=True, exist_ok=True)
         with resolved.open("a", encoding="utf-8") as file:
             file.write(content)
         return f"Appended content to {_to_workspace_relative(resolved)}"
     except OSError as err:
-        return (
-            f"Error: Unable to append '{file_path}': {err}"
-        )
+        return f"Error: Unable to append '{file_path}': {err}"
 
 
 def create_file(
@@ -435,23 +394,17 @@ def create_file(
 
     try:
         if create_dirs:
-            resolved.parent.mkdir(
-                parents=True, exist_ok=True
-            )
+            resolved.parent.mkdir(parents=True, exist_ok=True)
         if overwrite:
             resolved.write_text("", encoding="utf-8")
         else:
             resolved.touch(exist_ok=False)
         return f"Created file {_to_workspace_relative(resolved)}"
     except OSError as err:
-        return (
-            f"Error: Unable to create '{file_path}': {err}"
-        )
+        return f"Error: Unable to create '{file_path}': {err}"
 
 
-def delete_file(
-    file_path: str, missing_ok: bool = False
-) -> str:
+def delete_file(file_path: str, missing_ok: bool = False) -> str:
     """Delete a file."""
     try:
         resolved = _resolve_workspace_path(file_path)
@@ -469,14 +422,10 @@ def delete_file(
         resolved.unlink()
         return f"Deleted file {_to_workspace_relative(resolved)}"
     except OSError as err:
-        return (
-            f"Error: Unable to delete '{file_path}': {err}"
-        )
+        return f"Error: Unable to delete '{file_path}': {err}"
 
 
-def make_directory(
-    path: str, parents: bool = True, exist_ok: bool = True
-) -> str:
+def make_directory(path: str, parents: bool = True, exist_ok: bool = True) -> str:
     """Create a directory."""
     try:
         resolved = _resolve_workspace_path(path)
@@ -594,9 +543,7 @@ def move_path(
         return f"Error: Unable to move path: {err}"
 
 
-def rename_path(
-    source: str, new_name: str, overwrite: bool = False
-) -> str:
+def rename_path(source: str, new_name: str, overwrite: bool = False) -> str:
     """Rename a path in place."""
     if not new_name or Path(new_name).name != new_name:
         return "Error: new_name must be a single file or directory name"
@@ -711,9 +658,7 @@ def find_files(pattern: str, root: str = ".") -> list[str]:
         if not path.is_file():
             continue
         rel = _to_workspace_relative(path)
-        if fnmatch.fnmatch(
-            path.name, pattern
-        ) or fnmatch.fnmatch(rel, pattern):
+        if fnmatch.fnmatch(path.name, pattern) or fnmatch.fnmatch(rel, pattern):
             matches.append(rel)
     matches.sort()
     return matches
@@ -737,9 +682,7 @@ def search_in_files(
         return [{"error": str(err)}]
 
     if not root_dir.exists() or not root_dir.is_dir():
-        return [
-            {"error": f"Root directory '{root}' not found"}
-        ]
+        return [{"error": f"Root directory '{root}' not found"}]
 
     results: list[dict[str, Any]] = []
     needle = query if case_sensitive else query.lower()
@@ -763,15 +706,11 @@ def search_in_files(
             continue
 
         for line_number, line in enumerate(lines, start=1):
-            haystack = (
-                line if case_sensitive else line.lower()
-            )
+            haystack = line if case_sensitive else line.lower()
             if needle in haystack:
                 results.append(
                     {
-                        "path": _to_workspace_relative(
-                            file_path
-                        ),
+                        "path": _to_workspace_relative(file_path),
                         "line_number": line_number,
                         "line": line[:1000],
                     }
@@ -782,9 +721,7 @@ def search_in_files(
     return results
 
 
-def replace_in_file(
-    file_path: str, old: str, new: str, count: int = -1
-) -> str:
+def replace_in_file(file_path: str, old: str, new: str, count: int = -1) -> str:
     """Replace string content in a text file."""
     if old == "":
         return "Error: old must not be empty"
@@ -819,16 +756,14 @@ def replace_in_file(
     try:
         resolved.write_text(updated, encoding="utf-8")
     except OSError as err:
-        return (
-            f"Error: Unable to write '{file_path}': {err}"
-        )
+        return f"Error: Unable to write '{file_path}': {err}"
 
-    return f"Replaced {replacements} occurrence(s) in {_to_workspace_relative(resolved)}"
+    return (
+        f"Replaced {replacements} occurrence(s) in {_to_workspace_relative(resolved)}"
+    )
 
 
-def compute_file_hash(
-    file_path: str, algorithm: str = "sha256"
-) -> str:
+def compute_file_hash(file_path: str, algorithm: str = "sha256") -> str:
     """Compute file digest."""
     try:
         resolved = _resolve_workspace_path(file_path)
@@ -853,9 +788,7 @@ def compute_file_hash(
     return f"{algorithm}:{hasher.hexdigest()}"
 
 
-def diff_files(
-    file_a: str, file_b: str, context_lines: int = 3
-) -> str:
+def diff_files(file_a: str, file_b: str, context_lines: int = 3) -> str:
     """Return textual diff output."""
     if context_lines < 0:
         return "Error: context_lines must be >= 0"
@@ -872,20 +805,12 @@ def diff_files(
         return f"Error: File '{file_b}' not found"
 
     try:
-        lines_a = _read_text_file(path_a).splitlines(
-            keepends=True
-        )
-        lines_b = _read_text_file(path_b).splitlines(
-            keepends=True
-        )
+        lines_a = _read_text_file(path_a).splitlines(keepends=True)
+        lines_b = _read_text_file(path_b).splitlines(keepends=True)
     except UnicodeDecodeError:
-        return (
-            "Error: Both files must be UTF-8 text for diff"
-        )
+        return "Error: Both files must be UTF-8 text for diff"
     except OSError as err:
-        return (
-            f"Error: Unable to read files for diff: {err}"
-        )
+        return f"Error: Unable to read files for diff: {err}"
 
     diff = difflib.unified_diff(
         lines_a,
@@ -922,9 +847,7 @@ def zip_paths(
 
     added = 0
     try:
-        with ZipFile(
-            zip_path, mode="w", compression=ZIP_DEFLATED
-        ) as archive:
+        with ZipFile(zip_path, mode="w", compression=ZIP_DEFLATED) as archive:
             for raw_path in paths:
                 src = _resolve_workspace_path(raw_path)
                 if not src.exists():
@@ -946,9 +869,7 @@ def zip_paths(
                             continue
                         archive.write(
                             item,
-                            arcname=_to_workspace_relative(
-                                item
-                            ),
+                            arcname=_to_workspace_relative(item),
                         )
                         added += 1
     except ValueError as err:
@@ -971,10 +892,7 @@ def unzip_file(
     except ValueError as err:
         return f"Error: {err}"
 
-    if (
-        not archive_path.exists()
-        or not archive_path.is_file()
-    ):
+    if not archive_path.exists() or not archive_path.is_file():
         return f"Error: Zip file '{zip_path}' not found"
 
     try:
@@ -986,18 +904,14 @@ def unzip_file(
     try:
         with ZipFile(archive_path, mode="r") as archive:
             for member in archive.infolist():
-                target = (
-                    dest_dir / member.filename
-                ).resolve()
+                target = (dest_dir / member.filename).resolve()
                 try:
                     target.relative_to(dest_dir)
                 except ValueError:
                     return f"Error: Unsafe zip entry '{member.filename}'"
 
                 if member.is_dir():
-                    target.mkdir(
-                        parents=True, exist_ok=True
-                    )
+                    target.mkdir(parents=True, exist_ok=True)
                     continue
 
                 if target.exists() and not overwrite:
@@ -1006,9 +920,7 @@ def unzip_file(
                         f"{_to_workspace_relative(target)}"
                     )
 
-                target.parent.mkdir(
-                    parents=True, exist_ok=True
-                )
+                target.parent.mkdir(parents=True, exist_ok=True)
                 with (
                     archive.open(member, "r") as src_file,
                     target.open("wb") as dst_file,

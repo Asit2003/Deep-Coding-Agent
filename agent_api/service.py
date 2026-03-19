@@ -122,6 +122,7 @@ class AgentRunManager:
         )
         self._lock = Lock()
         self._runs: dict[str, AgentRunRecord] = {}
+        self._workspace_locks: dict[str, Lock] = {}
 
     @property
     def total_runs(self) -> int:
@@ -186,54 +187,74 @@ class AgentRunManager:
         """Shut down the worker pool."""
         self._executor.shutdown(wait=False, cancel_futures=False)
 
+    def _get_workspace_lock(self, working_directory: str) -> Lock:
+        """Return a stable lock for one workspace directory."""
+        with self._lock:
+            workspace_lock = self._workspace_locks.get(working_directory)
+            if workspace_lock is None:
+                workspace_lock = Lock()
+                self._workspace_locks[working_directory] = workspace_lock
+            return workspace_lock
+
     def _run_agent(self, run_id: str) -> None:
         """Execute one queued run and persist completion state."""
         with self._lock:
             record = self._runs[run_id]
-            record.status = "running"
-            record.started_at = utc_now()
             prompt = record.prompt
             project_name = record.project_name
             working_directory = record.working_directory
             plan_file = record.plan_file
 
-        logger.info("Starting agent run %s in %s", run_id, working_directory)
+        workspace_lock = self._get_workspace_lock(working_directory)
+        logger.info(
+            "Agent run %s waiting for workspace lock on %s",
+            run_id,
+            working_directory,
+        )
 
-        try:
-            config = replace(settings, plan_file=plan_file)
-            orchestrator = CodingOrchestrator(config=config)
-            result = orchestrator.run(
-                prompt,
-                project_name=project_name,
-                working_directory=working_directory,
-            )
-        except Exception as err:  # noqa: BLE001 - surface background failures.
-            logger.exception("Agent run %s failed", run_id)
+        with workspace_lock:
             with self._lock:
                 record = self._runs[run_id]
-                record.status = "failed"
-                record.error = str(err)
+                record.status = "running"
+                record.started_at = utc_now()
+
+            logger.info("Starting agent run %s in %s", run_id, working_directory)
+
+            try:
+                config = replace(settings, plan_file=plan_file)
+                orchestrator = CodingOrchestrator(config=config)
+                result = orchestrator.run(
+                    prompt,
+                    project_name=project_name,
+                    working_directory=working_directory,
+                )
+            except Exception as err:  # noqa: BLE001 - surface background failures.
+                logger.exception("Agent run %s failed", run_id)
+                with self._lock:
+                    record = self._runs[run_id]
+                    record.status = "failed"
+                    record.error = str(err)
+                    record.completed_at = utc_now()
+                return
+
+            final_summary = str(result.get("final_summary", "")).strip() or None
+            normalized_directory = str(
+                result.get("project_root")
+                or result.get("working_directory")
+                or working_directory
+            ).strip()
+
+            with self._lock:
+                record = self._runs[run_id]
+                record.status = "completed"
+                record.working_directory = normalized_directory or working_directory
                 record.completed_at = utc_now()
-            return
+                record.result = deepcopy(result)
+                record.final_summary = final_summary
+                record.agent_success = _agent_succeeded(result)
 
-        final_summary = str(result.get("final_summary", "")).strip() or None
-        normalized_directory = str(
-            result.get("project_root")
-            or result.get("working_directory")
-            or working_directory
-        ).strip()
-
-        with self._lock:
-            record = self._runs[run_id]
-            record.status = "completed"
-            record.working_directory = normalized_directory or working_directory
-            record.completed_at = utc_now()
-            record.result = deepcopy(result)
-            record.final_summary = final_summary
-            record.agent_success = _agent_succeeded(result)
-
-        logger.info(
-            "Completed agent run %s (agent_success=%s)",
-            run_id,
-            _agent_succeeded(result),
-        )
+            logger.info(
+                "Completed agent run %s (agent_success=%s)",
+                run_id,
+                _agent_succeeded(result),
+            )

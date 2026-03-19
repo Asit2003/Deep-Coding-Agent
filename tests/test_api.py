@@ -1,3 +1,5 @@
+import threading
+import time
 from datetime import UTC, datetime
 
 from fastapi.testclient import TestClient
@@ -136,3 +138,84 @@ def test_health_endpoint_reports_counts() -> None:
     assert payload["status"] == "ok"
     assert payload["total_runs"] == 1
     assert payload["active_runs"] == 0
+
+
+def test_run_manager_serializes_runs_for_same_working_directory(monkeypatch) -> None:
+    manager = AgentRunManager(max_workers=2)
+    active_runs = 0
+    max_active_runs = 0
+    active_lock = threading.Lock()
+    first_started = threading.Event()
+    second_started = threading.Event()
+    release_first = threading.Event()
+
+    class _FakeOrchestrator:
+        def __init__(self, config) -> None:
+            self.config = config
+
+        def run(
+            self,
+            prompt: str,
+            project_name: str | None = None,
+            working_directory: str | None = None,
+        ) -> dict[str, object]:
+            nonlocal active_runs, max_active_runs
+            with active_lock:
+                active_runs += 1
+                max_active_runs = max(max_active_runs, active_runs)
+                if prompt == "First run":
+                    first_started.set()
+                else:
+                    second_started.set()
+
+            if prompt == "First run":
+                release_first.wait(timeout=2)
+
+            with active_lock:
+                active_runs -= 1
+
+            return {
+                "final_summary": f"finished:{prompt}",
+                "tests_passed": True,
+                "project_root": working_directory or "",
+            }
+
+    monkeypatch.setattr("agent_api.service.CodingOrchestrator", _FakeOrchestrator)
+
+    try:
+        first = manager.submit(
+            AgentRunCreateRequest(
+                prompt="First run",
+                working_directory="project/shared-workspace",
+            )
+        )
+        assert first_started.wait(timeout=2)
+
+        second = manager.submit(
+            AgentRunCreateRequest(
+                prompt="Second run",
+                working_directory="project/shared-workspace",
+            )
+        )
+
+        time.sleep(0.2)
+        assert second_started.is_set() is False
+        assert manager.get(second.run_id).status == "queued"
+
+        release_first.set()
+
+        deadline = time.time() + 3
+        while time.time() < deadline:
+            first_state = manager.get(first.run_id)
+            second_state = manager.get(second.run_id)
+            if first_state.status == "completed" and second_state.status == "completed":
+                break
+            time.sleep(0.05)
+        else:
+            raise AssertionError("Timed out waiting for serialized runs to finish")
+
+        assert second_started.is_set() is True
+        assert max_active_runs == 1
+    finally:
+        release_first.set()
+        manager.shutdown()

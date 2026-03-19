@@ -16,26 +16,14 @@ from agent.prompts import DEEP_AGENT_SYSTEM_PROMPT
 from agent.state import AgentState, PlanTask
 from agent.test_builder import TestRunner
 from config import AgentConfig, settings
-from tools.plan_tools import (
-    create_plan,
-    decompose_task,
-    reflect_on_plan,
-    set_subgoals,
-    track_progress,
-    update_plan,
-)
+from tools.plan_tools import make_scoped_plan_tools
 from tools.research_tools import (
     list_reference_docs,
     search_project_context,
     search_reference_notes,
 )
 from tools.shell_tools import make_run_shell_tool
-from tools.todo_tools import (
-    get_open_steps,
-    get_plan_overview,
-    mark_step_blocked,
-    mark_step_completed,
-)
+from tools.todo_tools import make_scoped_todo_tools
 from utils import files as file_ops
 from utils import plans as plan_ops
 
@@ -402,17 +390,11 @@ class CodingOrchestrator:
         )
 
         run_shell = make_run_shell_tool(base_directory=project_root)
+        scoped_plan_tools = make_scoped_plan_tools(plan_file=str(self.config.plan_file))
+        scoped_todo_tools = make_scoped_todo_tools(plan_file=str(self.config.plan_file))
         custom_tools = [
-            create_plan,
-            update_plan,
-            decompose_task,
-            set_subgoals,
-            track_progress,
-            reflect_on_plan,
-            get_plan_overview,
-            get_open_steps,
-            mark_step_completed,
-            mark_step_blocked,
+            *scoped_plan_tools,
+            *scoped_todo_tools,
             list_reference_docs,
             search_reference_notes,
             search_project_context,
@@ -557,7 +539,7 @@ class CodingOrchestrator:
         if not agent_summary:
             agent_summary = "(Deep Agent returned no textual summary.)"
 
-        tests_result = self.test_runner.run(cwd=project_root)
+        tests_result = self.test_runner.run()
         tests_passed = bool(tests_result.get("passed", False))
         tests_exit_code = int(tests_result.get("exit_code", -1))
         tests_output = str(tests_result.get("output", "")).strip()

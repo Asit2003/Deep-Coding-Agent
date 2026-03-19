@@ -113,6 +113,7 @@ def test_run_verifies_plan_file_before_graph_invoke(monkeypatch) -> None:
         return "Verified plan file (no updates required)"
 
     captured_payload: list[dict] = []
+    captured_test_cwds: list[str | None] = []
 
     def _fake_invoke(payload: dict) -> dict:
         captured_payload.append(payload)
@@ -121,11 +122,12 @@ def test_run_verifies_plan_file_before_graph_invoke(monkeypatch) -> None:
     monkeypatch.setattr("agent.orchestrator.plan_ops.verify_plan_file", _fake_verify)
     orchestrator.graph = SimpleNamespace(invoke=_fake_invoke)
     orchestrator.graph_project_root = "project/demo"
-    monkeypatch.setattr(
-        orchestrator.test_runner,
-        "run",
-        lambda cwd=None: {"passed": True, "exit_code": 0, "output": f"ok:{cwd}"},
-    )
+
+    def _fake_test_run(cwd=None):
+        captured_test_cwds.append(cwd)
+        return {"passed": True, "exit_code": 0, "output": f"ok:{cwd}"}
+
+    monkeypatch.setattr(orchestrator.test_runner, "run", _fake_test_run)
 
     result = orchestrator.run("Build endpoint", project_name="demo")
 
@@ -134,6 +136,7 @@ def test_run_verifies_plan_file_before_graph_invoke(monkeypatch) -> None:
     assert "Build endpoint" in captured_payload[0]["messages"][0]["content"]
     assert result["project_root"] == "project/demo"
     assert result["working_directory"] == "project/demo"
+    assert captured_test_cwds == [None]
     assert verify_calls == [
         ("Build endpoint", "tmp_plan_orchestrator_verify.md", config.planning_max_steps)
     ]
